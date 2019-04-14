@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>推箱子</title>
+    <style>
+        #container {
+            width: 800px;
+            margin: 0 auto;
+        }
+
+        #game {
+            margin: 0 auto
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <label for="level">选择关卡
+        <select name="level" id="level" onChange="changeLevel()">
+            <option value="1">1</option>
+            <option value="2">2</option>
+        </select>
+    </label>
+    <canvas id="game" width="800" height="600">
+    </canvas>
+
+</div>
+
+<script>
+
+    function changeLevel() {
+        const level = document.getElementById('level').value;
+
+    }
+
+    /**
+     * 0为空地图
+     * 1为目标
+     * 2为地面
+     * 3为墙
+     **/
+    const levels = [
+        {
+            person: {row: 4, col: 6},
+            map: [[0, 0, 0, 0, 3, 3, 3, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 3, 1, 3, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 3, 2, 3, 3, 3, 3, 0, 0],
+                [0, 0, 3, 3, 3, 4, 2, 4, 1, 3, 0, 0],
+                [0, 0, 3, 1, 2, 4, 2, 3, 3, 3, 0, 0],
+                [0, 0, 3, 3, 3, 3, 4, 3, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 3, 1, 3, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0, 0]
+            ],
+            goal: 4
+        },
+        {
+            person: {row: 1, col: 3},
+            map: [
+                [0, 0, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0],
+                [0, 0, 3, 2, 2, 2, 3, 0, 0, 0, 0, 0],
+                [0, 0, 3, 2, 4, 4, 3, 0, 3, 3, 3, 0],
+                [0, 0, 3, 2, 4, 2, 3, 0, 3, 1, 3, 0],
+                [0, 0, 3, 3, 3, 2, 3, 3, 3, 1, 3, 0],
+                [0, 0, 0, 3, 3, 2, 2, 2, 2, 1, 3, 0],
+                [0, 0, 0, 3, 2, 2, 2, 3, 2, 2, 3, 0],
+                [0, 0, 0, 3, 2, 2, 2, 3, 3, 3, 3, 0],
+                [0, 0, 0, 3, 3, 3, 3, 3, 0, 0, 0, 0]],
+            goal: 3
+        },
+    ];
+    let level = 1,
+        map = levels[level - 1].map,
+        originMap = JSON.parse(JSON.stringify(map)),
+        goal = levels[level - 1].goal;
+    const canvas = document.getElementById('game'),
+        ctx = canvas.getContext('2d');
+
+    async function init(level) {
+            map = levels[level - 1].map;
+        originMap = JSON.parse(JSON.stringify(map));
+        for (let row = 0; row < map.length; row++) {
+            for (let col = 0; col < map[row].length; col++) {
+                switch (map[row][col]) {
+                    case 1:
+                        await paintFloor(ctx, row, col, 40);
+                        await paintEndPoint(ctx, row, col, 40);
+                        break;
+                    case 2:
+                        await paintFloor(ctx, row, col, 40);
+                        break;
+                    case 3:
+                        await paintWall(ctx, row, col, 40);
+                        break;
+                    case 4:
+                        await paintCrate(ctx, row, col)
+                }
+            }
+        }
+        const person = new Person(ctx, levels[level - 1].person);
+
+    }
+
+    init()
+
+    async function paintFloor(ctx, row, col, size) {
+        const img = await loadImg('./img/ground.png');
+        ctx.drawImage(img, 40 * col, 40 * row, size, size);
+    }
+
+    async function paintEndPoint(ctx, row, col, size) {
+        const img = new Image();
+        img.onload = () => {
+            ctx.drawImage(img, 40 * col, 40 * row, size, size);
+
+        };
+        img.src = './img/endPoint.png';
+    }
+
+    class Person {
+        constructor(ctx, {row, col}, size) {
+            this.ctx = ctx;
+            this.row = row;
+            this.col = col;
+            this.size = size;
+            this.paint(ctx);
+            document.onkeydown = this.handleKeyboardDown.bind(this);
+        }
+
+        /**
+         * 判断人能否移动
+         * @param row 横向第x个地块
+         * @param col 纵向第y的地块
+         * @param direction 移动方向
+         */
+        judgeMove(row, col, direction) {
+            return (map[row][col] === 1 || map[row][col] === 2 || map[row][col] === 4 && this.judgePush(row, col, direction));
+        }
+
+        handleKeyboardDown(ev) {
+            ev = ev || event;
+            switch (ev.key) {
+                case 'ArrowUp':
+                    this.move('up');
+                    break;
+                case 'ArrowRight':
+                    this.move('right');
+                    break;
+                case 'ArrowDown':
+                    this.move('down');
+                    break;
+                case 'ArrowLeft':
+                    this.move('left');
+                    break;
+            }
+        }
+
+        async move(direction) {
+            let row = this.row, col = this.col;
+            switch (direction) {
+                case 'up':
+                    row -= 1;
+                    break;
+                case 'right':
+                    col += 1;
+                    break;
+                case 'down':
+                    row += 1;
+                    break;
+                case 'left':
+                    col -= 1;
+                    break;
+            }
+            if (this.judgeMove(row, col, direction)) {
+                await paintFloor(ctx, this.row, this.col, 40);
+                // 移动后重绘方格
+                if (map[this.row][this.col] === 1) {
+                    await paintEndPoint(this.ctx, this.row, this.col, 40)
+                }
+                if (map[row][col] === 4) {
+                    await paintFloor(ctx, row, col, 40);
+                    this.pushCrate(row, col, direction);
+                }
+
+                this.row = row;
+                this.col = col;
+                this.paint(this.ctx)
+            }
+        }
+
+        judgePush(row, col, direction) {
+            console.log(direction)
+
+            switch (direction) {
+                case 'up':
+                    row -= 1;
+                    break;
+                case 'right':
+                    col += 1;
+                    break;
+                case 'down':
+                    row += 1;
+                    break;
+                case 'left':
+                    col -= 1;
+                    break;
+            }
+            console.log(map[row][col], row, col)
+            if (map[row][col] === 1 || map[row][col] === 2) {
+                return true;
+            }
+            return false;
+        }
+
+        async pushCrate(row, col, direction) {
+            if (originMap[row][col] === 1) {
+                goal++;
+                map[row][col] = 1;
+            } else {
+                map[row][col] = 2;
+            }
+            switch (direction) {
+                case 'up':
+                    row -= 1;
+                    break;
+                case 'right':
+                    col += 1;
+                    break;
+                case 'down':
+                    row += 1;
+                    break;
+                case 'left':
+                    col -= 1;
+                    break;
+            }
+            if (originMap[row][col] === 1) {
+                goal--;
+            }
+            map[row][col] = 4;
+            await paintCrate(ctx, row, col);
+            if (goal === 0) {
+                alert('恭喜通过该关卡！')
+            }
+        }
+
+        paint(ctx) {
+            ctx.beginPath();
+            ctx.fillStyle = 'black';
+            ctx.arc(40 * this.col + 20, 40 * this.row + 20, 16, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.closePath()
+        }
+    }
+
+
+    async function paintWall(ctx, row, col, size) {
+        const img = await loadImg('./img/wall.png');
+
+        ctx.drawImage(img, 40 * col, 40 * row, size, size);
+
+    }
+
+    async function paintCrate(ctx, row, col) {
+        const img = await loadImg('./img/crate.png');
+        ctx.drawImage(img, 40 * col, 40 * row, 40, 40)
+    }
+
+    function loadImg(src) {
+        const img = new Image;
+        return new Promise(resolve => {
+            img.onload = () => {
+                resolve(img);
+            };
+            img.src = src;
+        })
+    }
+
+
+</script>
+</body>
+</html>
